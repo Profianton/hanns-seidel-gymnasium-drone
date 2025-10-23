@@ -4,11 +4,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hallo</title>
+    <title>Controller</title>
+
 </head>
 
 <body>
-    Hallo
+    <div style="display: flex;gap: 24px;align-items: center;justify-content: center;margin-top: 24px;">
+
+        <div>
+            <div id="joystick"
+                style="width: 220px;height: 220px;border-radius: 50%;background: radial-gradient(circle at 30% 30%, #f0f0f0, #ddd);position: relative;touch-action: none;/* Prevent touch scrolling while dragging */box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);">
+                <div id="knob"
+                    style="width: 72px;height: 72px;border-radius: 50%;background: #444;position: absolute;left: 50%;top: 50%;transform: translate(-50%, -50%);touch-action: none;display: flex;align-items: center;justify-content: center;color: white;user-select: none;">
+                    ◉</div>
+            </div>
+            <div style="display: flex;flex-direction: column;">
+                <div>rot</div>
+
+                <input type="range" min="-100" max="100" value="0" id="rot-axis"
+                    onchange="this.value=0;computeAndSend()">
+
+            </div>
+        </div>
+        <div style="display: flex;flex-direction: column;align-items: center;gap: 8px;">
+            <div>Z</div>
+            <input type="range" min="-100" max="100" value="0" id="Z-axis" onchange="this.value=0;computeAndSend()"
+                style="writing-mode: bt-lr;-webkit-appearance: slider-vertical;width: 12px;height: 200px;">
+
+        </div>
+    </div>
+    <div id="values" style="text-align: center;font-family: monospace;"></div>
+    <script>
+        const wsUri = `ws://${window.location.host}/ws`;
+        function send(x, y, z, rot) {
+            if (ws) {
+                ws.send(JSON.stringify({ x: x, y: y, z: z, rot: rot }))
+            }
+            const valuesEl = document.getElementById('values');
+
+            valuesEl.textContent = `x:${x.toFixed(2)} y:${y.toFixed(2)} z:${z.toFixed(2)} rot:${rot.toFixed(2)}`;
+
+        }
+        let ws;
+        function connect() {
+            ws = new WebSocket(wsUri);
+            ws.onopen = (e) => {
+                computeAndSend()
+            }
+            ws.onmessage = function (e) {
+                console.log('Message:', e.data);
+            };
+
+            ws.onclose = function (e) {
+                console.log('Socket is closed. Reconnect will be attempted in 1 second.', e.reason);
+                setTimeout(function () {
+                    connect();
+                }, 1000);
+            };
+
+            ws.onerror = function (err) {
+                console.error('Socket encountered error: ', err.message, 'Closing socket');
+                ws.close();
+            };
+        }
+
+        connect();
+
+
+        const joystickSize = 220;
+        const knobSize = 72;
+
+        function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+
+
+
+        function computeAndSend() {
+            const nx = clamp(pos.x / maxRadius, -1, 1);
+            const ny = clamp(-pos.y / maxRadius, -1, 1); // invert Y so up is positive
+            const nz = clamp(parseInt(zEl.value, 10) / 100, -1, 1);
+            const nrot = clamp(parseInt(rotEl.value, 10) / 100, -1, 1);
+
+            send(nx, ny, nz, nrot);
+        }
+
+        function pointerMove(clientX, clientY) {
+            const dx = clientX - (rect.left + rect.width / 2);
+            const dy = clientY - (rect.top + rect.height / 2);
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const angle = Math.atan2(dy, dx);
+            const r = Math.min(dist, maxRadius);
+            pos.x = r * Math.cos(angle);
+            pos.y = r * Math.sin(angle);
+            // position relative to center: translate(-50%,-50%) used, so adjust
+            knobEl.style.transform = `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px)`;
+            computeAndSend();
+        }
+
+        function resetKnob() {
+            pos.x = 0; pos.y = 0;
+            knobEl.style.transform = 'translate(-50%, -50%) translate(0px, 0px)';
+            computeAndSend();
+        }
+
+        const area = document.getElementById('joystick');
+        const knobEl = document.getElementById('knob');
+        const zEl = document.getElementById('Z-axis');
+        const rotEl = document.getElementById('rot-axis');
+
+
+
+        const rect = area.getBoundingClientRect();
+        const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        const maxRadius = (rect.width - knobSize) / 2;
+
+        let pointerId = null;
+        let pos = { x: 0, y: 0 };
+        // Mouse
+        area.addEventListener('mousedown', function (ev) {
+            ev.preventDefault();
+            pointerMove(ev.clientX, ev.clientY);
+            function onMove(e) { pointerMove(e.clientX, e.clientY); }
+            function onUp(e) { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); resetKnob(); }
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
+        });
+
+        // Touch
+        area.addEventListener('touchstart', function (ev) {
+            ev.preventDefault();
+            const t = ev.changedTouches[0];
+            pointerId = t.identifier;
+            pointerMove(t.clientX, t.clientY);
+        }, { passive: false });
+
+        area.addEventListener('touchmove', function (ev) {
+            ev.preventDefault();
+            for (let i = 0; i < ev.changedTouches.length; i++) {
+                const t = ev.changedTouches[i];
+                if (t.identifier === pointerId) { pointerMove(t.clientX, t.clientY); break; }
+            }
+        }, { passive: false });
+
+        area.addEventListener('touchend', function (ev) {
+            ev.preventDefault();
+            for (let i = 0; i < ev.changedTouches.length; i++) {
+                const t = ev.changedTouches[i];
+                if (t.identifier === pointerId) { pointerId = null; resetKnob(); break; }
+            }
+        }, { passive: false });
+
+        zEl.addEventListener('input', function () { computeAndSend(); });
+        rotEl.addEventListener('input', function () { computeAndSend(); });
+
+
+    </script>
 </body>
 
 </html>

@@ -1,6 +1,9 @@
-from fastapi import FastAPI, Request, responses
+from typing import Annotated
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, responses
 from fastapi.templating import Jinja2Templates
 import pathlib
+
+from pydantic import BaseModel, Field, ValidationError
 
 # Initialize FastAPI
 app = FastAPI(redirect_slashes=False)
@@ -23,6 +26,26 @@ def home(request: Request):
     The status code is 200 OK for a successful page load.
     """
     return templates.TemplateResponse(request, "index.html")
+
+
+class Message(BaseModel):
+    x: Annotated[float, Field(ge=-1, le=1)]
+    y: Annotated[float, Field(ge=-1, le=1)]
+    z: Annotated[float, Field(ge=-1, le=1)]
+    rot: Annotated[float, Field(ge=-1, le=1)]
+
+
+@app.websocket("/ws")
+async def ws(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            cmd = Message.model_validate(await websocket.receive_json())
+            print(cmd)
+    except WebSocketDisconnect:
+        pass
+    except ValidationError:
+        await websocket.close()
 
 
 # sudo uvicorn main:app --host 0.0.0.0 --port 80
