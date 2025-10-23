@@ -79,6 +79,9 @@
 
 
         function computeAndSend() {
+            const rect = area.getBoundingClientRect();
+            const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            const maxRadius = (rect.width - knobSize) / 2;
             const nx = clamp(pos.x / maxRadius, -1, 1);
             const ny = clamp(-pos.y / maxRadius, -1, 1); // invert Y so up is positive
             const nz = clamp(parseInt(zEl.value, 10) / 100, -1, 1);
@@ -88,6 +91,9 @@
         }
 
         function pointerMove(clientX, clientY) {
+            const rect = area.getBoundingClientRect();
+            const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            const maxRadius = (rect.width - knobSize) / 2;
             const dx = clientX - (rect.left + rect.width / 2);
             const dy = clientY - (rect.top + rect.height / 2);
             const dist = Math.sqrt(dx * dx + dy * dy);
@@ -110,12 +116,6 @@
         const knobEl = document.getElementById('knob');
         const zEl = document.getElementById('Z-axis');
         const rotEl = document.getElementById('rot-axis');
-
-
-
-        const rect = area.getBoundingClientRect();
-        const center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-        const maxRadius = (rect.width - knobSize) / 2;
 
         let pointerId = null;
         let pos = { x: 0, y: 0 };
