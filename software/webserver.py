@@ -1,51 +1,87 @@
-from typing import Annotated
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, responses
-from fastapi.templating import Jinja2Templates
+import asyncio
+
+from microdot import Microdot, send_file
+from microdot.websocket import websocket_upgrade
+import json
 import pathlib
+from env import env
 
-from pydantic import BaseModel, Field, ValidationError
+app = Microdot()
 
-# Initialize FastAPI
-app = FastAPI(redirect_slashes=False)
 
-# Define the templates directory path
-# This looks for a folder named 'templates' in the same directory as main.py
+try:
+    assert __file__
+except Exception:
+    __file__ = "webserver.py"
+
+
 templates_dir = pathlib.Path(__file__).parent / "templates"
-templates = Jinja2Templates(directory=templates_dir)
 
 
-@app.get("/")
-def redirect():
-    return responses.RedirectResponse("/home")
+@app.route("/")
+def home(request):
+    return send_file(str(templates_dir / "index.html"))
 
 
-@app.get("/home")
-def home(request: Request):
-    """
-    Serves the main page using the Jinja2 template.
-    The status code is 200 OK for a successful page load.
-    """
-    return templates.TemplateResponse(request, "index.html")
+@app.route("/ws")
+async def ws(request):
+    ws = await websocket_upgrade(request)
+    print("WebSocket client connected.")
+    while True:
+        try:
+            data = await ws.receive()
+            msg = json.loads(data)
+            # Basic validation
+            if all(k in msg for k in ["x", "y", "z", "rot"]):
+                # Here you would typically pass the coordinates to a controller module
+                # For now, we just print them to the console.
+                print(
+                    f"Received command: x={msg['x']:.2f}, y={msg['y']:.2f}, z={msg['z']:.2f}, rot={msg['rot']:.2f}"
+                )
+            else:
+                print(f"Received invalid message: {data}")
+        except Exception as e:
+            print(f"WebSocket connection closed: {e}")
+            break
+    print("WebSocket client disconnected.")
 
 
-class Message(BaseModel):
-    x: Annotated[float, Field(ge=-1, le=1)]
-    y: Annotated[float, Field(ge=-1, le=1)]
-    z: Annotated[float, Field(ge=-1, le=1)]
-    rot: Annotated[float, Field(ge=-1, le=1)]
+def connect_to_wifi(ssid, password):
+    import network  # pyright: ignore[reportMissingImports]
+    import time
+
+    wlan = network.WLAN(network.STA_IF)
+    wlan.active(True)
+    wlan.connect(ssid, password)
+
+    max_wait = 10
+    print("Connecting to Wi-Fi...")
+    while max_wait > 0:
+        if wlan.status() < 0 or wlan.status() >= 3:
+            break
+        max_wait -= 1
+        time.sleep(1)
+
+    if wlan.status() != 3:
+        raise RuntimeError("Wi-Fi connection failed!")
+    else:
+        status = wlan.ifconfig()
+        print("IP address:", status[0])
+        return status[0]
 
 
-@app.websocket("/ws")
-async def ws(websocket: WebSocket):
-    await websocket.accept()
-    try:
-        while True:
-            cmd = Message.model_validate(await websocket.receive_json())
-            print(cmd)
-    except WebSocketDisconnect:
-        pass
-    except ValidationError:
-        await websocket.close()
+async def main():
+    if env["WLAN"] is not None:
+        try:
+            ip = connect_to_wifi(env["WLAN"]["SSID"], env["WLAN"]["PASSWORD"])
+        except RuntimeError as e:
+            print(f"Error: {e}")
+            return
+        server = asyncio.create_task(app.start_server(host=ip, port=80))
+    else:
+        server = asyncio.create_task(app.start_server(port=5000))
+    await server
 
 
+asyncio.run(main())
 # sudo uvicorn main:app --host 0.0.0.0 --port 80

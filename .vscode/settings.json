@@ -1,0 +1,10 @@
+{
+    "emeraldwalk.runonsave": {
+        "commands": [
+            {
+                "match": "software/env\\.py",
+                "cmd": "./software/env_gen_schema.sh"
+            }
+        ]
+    }
+}
