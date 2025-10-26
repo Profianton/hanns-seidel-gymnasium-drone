@@ -1,4 +1,6 @@
+import json
 from pydantic import BaseModel
+from env import env
 from webserver import Message
 from inputs import get_gamepad
 import threading
@@ -86,24 +88,27 @@ async def websocket_client(controller: Controller):
     Connects to the WebSocket server and sends controller state updates.
     This function should be run in a separate thread using asyncio.
     """
+    assert env["WSURI"]
     while controller.running:
         try:
-            async with websockets.connect("ws://localhost:8000/ws") as websocket:
+            async with websockets.connect(env["WSURI"]) as websocket:
                 print("Connected to WebSocket server")
                 while controller.running:
                     state = controller.get_state()
                     # Map controller values to drone controls:
                     # Left stick Y: forward/backward (-1 to 1)
-                    # Left stick X: left/right strafe (-1 to 1)
+                    # Left stick X: left/right strafe (-1 to 1                    # Right stick X: rotation (-1 to 1)
+
                     # Right stick Y: up/down (-1 to 1)
-                    # Right stick X: rotation (-1 to 1)
                     message = Message(
-                        x=state.left_stick.x,  # Strafe
-                        y=-state.left_stick.y,  # Forward/Backward (inverted)
-                        z=state.right_stick.y,  # Up/Down
-                        rot=state.right_stick.x,  # Rotation
+                        {
+                            "x": state.left_stick.x,
+                            "y": -state.left_stick.y,
+                            "z": state.right_stick.y,
+                            "rot": state.right_stick.x,
+                        }
                     )
-                    await websocket.send(message.model_dump_json())
+                    await websocket.send(json.dumps(message))
                     await asyncio.sleep(0.05)  # Send updates at 20Hz
         except Exception as e:
             print(f"WebSocket error: {str(e)}")

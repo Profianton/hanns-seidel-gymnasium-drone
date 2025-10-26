@@ -1,4 +1,5 @@
 import asyncio
+from typing import TypedDict
 
 from microdot import Microdot, send_file
 from microdot.websocket import websocket_upgrade
@@ -23,6 +24,13 @@ def home(request):
     return send_file(str(templates_dir / "index.html"))
 
 
+class Message(TypedDict):
+    x: float
+    y: float
+    z: float
+    rot: float
+
+
 @app.route("/ws")
 async def ws(request):
     ws = await websocket_upgrade(request)
@@ -30,16 +38,10 @@ async def ws(request):
     while True:
         try:
             data = await ws.receive()
-            msg = json.loads(data)
-            # Basic validation
-            if all(k in msg for k in ["x", "y", "z", "rot"]):
-                # Here you would typically pass the coordinates to a controller module
-                # For now, we just print them to the console.
-                print(
-                    f"Received command: x={msg['x']:.2f}, y={msg['y']:.2f}, z={msg['z']:.2f}, rot={msg['rot']:.2f}"
-                )
-            else:
-                print(f"Received invalid message: {data}")
+            msg = Message(json.loads(data))
+            print(
+                f"Received command: x={msg['x']:.2f}, y={msg['y']:.2f}, z={msg['z']:.2f}, rot={msg['rot']:.2f}"
+            )
         except Exception as e:
             print(f"WebSocket connection closed: {e}")
             break
@@ -83,5 +85,6 @@ async def main():
     await server
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
 # sudo uvicorn main:app --host 0.0.0.0 --port 80

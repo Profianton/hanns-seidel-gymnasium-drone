@@ -55,6 +55,7 @@ class WLANConfig(TypedDict):
 
 class Config(TypedDict):
     WLAN: WLANConfig | None
+    WSURI: str | None
 
 
 env_file_path = pathlib.Path(__file__).parent / "env.json"
